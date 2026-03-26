@@ -89,10 +89,13 @@ const analyzeImage = async (req, res) => {
 const transcribeVoice = async (req, res) => {
   try {
     console.log('Transcription requested...', {
-      file: req.file ? `Received: ${req.file.originalname} (${req.file.size} bytes)` : 'NOT RECEIVED'
+      file: req.file ? `Received: ${req.file.originalname} (${req.file.size} bytes)` : 'NOT RECEIVED',
+      key_present: !!process.env.OPENAI_API_KEY && process.env.OPENAI_API_KEY !== 'your_openai_api_key_here',
+      env_port: process.env.PORT
     });
 
     if (!req.file) {
+      console.warn('Transcribe: No file received');
       return res.status(400).json({ success: false, message: 'No audio file provided' });
     }
 
@@ -105,7 +108,7 @@ const transcribeVoice = async (req, res) => {
     }
 
     const transcription = await openai.audio.transcriptions.create({
-      file: fs.createReadStream(req.file.path),
+      file: await OpenAI.toFile(fs.createReadStream(req.file.path), 'voice_command.webm'),
       model: 'whisper-1',
     });
 
@@ -114,9 +117,21 @@ const transcribeVoice = async (req, res) => {
 
     res.json({ success: true, text: transcription.text });
   } catch (error) {
-    console.error('AI transcribe error:', error);
+    console.error('AI transcribe error details:', {
+      message: error.message,
+      stack: error.stack,
+      status: error.status,
+      response: error.response?.data || error.response
+    });
+
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.status(500).json({ success: false, message: error.message || 'Error transcribing audio' });
+    
+    const statusCode = error.status || 500;
+    res.status(statusCode).json({ 
+      success: false, 
+      message: error.message || 'Error transcribing audio', 
+      details: error.message 
+    });
   }
 };
 

@@ -45,22 +45,27 @@ export default function VoiceAssistant() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       audioChunksRef.current = []
-      const recorder = new MediaRecorder(stream)
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm') 
+        ? 'audio/webm' 
+        : 'audio/mp4'
+      
+      const recorder = new MediaRecorder(stream, { mimeType })
 
       recorder.ondataavailable = (e) => {
         if (e.data.size > 0) audioChunksRef.current.push(e.data)
       }
 
       recorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' })
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType })
         if (audioBlob.size < 1000) return // Too small
 
         setProcessing(true)
         setTranscript('Transcribing...')
         
         try {
+          const extension = mimeType.includes('webm') ? 'webm' : 'm4a'
           const formData = new FormData()
-          formData.append('audio', audioBlob, 'voice_command.webm')
+          formData.append('audio', audioBlob, `voice_command.${extension}`)
 
           const res = await api.post('/ai/transcribe', formData)
           if (res.data.success) {
